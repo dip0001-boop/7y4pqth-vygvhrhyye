@@ -1,18 +1,17 @@
 {
-  "name": "snub-custom-search-engine",
+  "name": "your-app-name",
   "version": "1.0.0",
-  "description": "Independent search engine with automated spider, FTS5 indexer, BM25 ranker, and browser UI",
-  "main": "server.js",
+  "description": "Your Node.js app using SQLite",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "axios": "^1.7.2",
-    "better-sqlite3": "^11.1.2",
-    "cheerio": "^1.0.0",
-    "express": "^4.19.2"
+    "start": "node index.js",
+    "build": "npm install"
   },
   "engines": {
-    "node": ">=18.0.0"
-  }
+    "node": "22.x"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {}
 }
