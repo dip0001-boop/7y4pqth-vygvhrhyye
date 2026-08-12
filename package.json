@@ -1,13 +1,14 @@
 {
-  "name": "snub-live-search",
-  "version": "5.0.0",
-  "description": "Multi-tab browser with live real-time web search integration",
+  "name": "snub-custom-search-engine",
+  "version": "1.0.0",
+  "description": "Independent search engine with automated spider, FTS5 indexer, BM25 ranker, and browser UI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.7.2",
+    "better-sqlite3": "^11.1.2",
     "cheerio": "^1.0.0",
     "express": "^4.19.2"
   },
