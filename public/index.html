@@ -289,14 +289,13 @@
                 id: tabId,
                 title: 'New Tab',
                 url: initialUrl,
-                mode: 'home', // home or results
+                mode: 'home',
                 query: '',
                 resultsData: null
             };
 
             tabs.push(tabData);
 
-            // Create DOM elements for tab button
             const tabEl = document.createElement('div');
             tabEl.className = 'tab';
             tabEl.id = `tab-btn-${tabId}`;
@@ -307,7 +306,6 @@
             tabEl.onclick = () => switchTab(tabId);
             tabsContainer.appendChild(tabEl);
 
-            // Create DOM elements for tab view pane
             const paneEl = document.createElement('div');
             paneEl.className = 'view-pane';
             paneEl.id = `pane-${tabId}`;
@@ -326,7 +324,6 @@
             `;
             viewport.appendChild(paneEl);
 
-            // Bind enter key on search input
             setTimeout(() => {
                 const inputEl = document.getElementById(`search-input-${tabId}`);
                 if (inputEl) {
@@ -361,7 +358,6 @@
             event.stopPropagation();
 
             if (tabs.length === 1) {
-                // Keep at least one tab open
                 return;
             }
 
@@ -396,7 +392,6 @@
                 urlInput.value = tab.url;
             }
 
-            // Toggle view panels inside pane
             const pane = document.getElementById(`pane-${tabId}`);
             const dashboardEl = pane.querySelector('.dashboard');
             const resultsContainer = pane.querySelector(`#results-container-${tabId}`);
@@ -436,7 +431,6 @@
 
         document.getElementById('newTabBtn').addEventListener('click', () => createTab());
 
-        // Initialize first tab on load
         createTab();
     </script>
 </body>
