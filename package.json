@@ -4,14 +4,13 @@
   "description": "Your Node.js app using SQLite",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "npm install"
+    "start": "node server.js"
   },
   "engines": {
     "node": "22.x"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0"
-  },
-  "devDependencies": {}
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.19.0"
+  }
 }
