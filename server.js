@@ -2,17 +2,18 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const path = require('path');
+const { URL } = require('url');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Engine State
-const documents = new Map(); // docId -> { url, title, snippet, wordCount }
+const documents = new Map(); // docId -> { url, title, snippet, wordCount, incomingLinks }
 const invertedIndex = new Map(); // term -> Map(docId -> termFrequency)
 let docIdCounter = 0;
 
-const STOP_WORDS = new Set(['the', 'is', 'at', 'which', 'and', 'a', 'an', 'in', 'to', 'of', 'for', 'on', 'with', 'as', 'by', 'this', 'it', 'from']);
+const STOP_WORDS = new Set(['the', 'is', 'at', 'which', 'and', 'a', 'an', 'in', 'to', 'of', 'for', 'on', 'with', 'as', 'by', 'this', 'it', 'from', 'or', 'be', 'that']);
 
 function tokenize(text) {
     if (!text) return [];
@@ -51,11 +52,12 @@ async function runCrawlerAgent(agentId) {
             try {
                 const response = await axios.get(url, {
                     timeout: 4000,
-                    headers: { 'User-Agent': `SnubCrawlerAgent-${agentId}/2.0` }
+                    headers: { 'User-Agent': `SnubCrawlerAgent-${agentId}/3.0 (Enterprise Search Indexer)` }
                 });
 
                 const $ = cheerio.load(response.data);
                 const title = $('title').text().trim() || url;
+                const metaDesc = $('meta[name="description"]').attr('content') || '';
 
                 $('script').remove();
                 $('style').remove();
@@ -64,11 +66,11 @@ async function runCrawlerAgent(agentId) {
                 $('header').remove();
 
                 const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
-                const snippet = bodyText.substring(0, 200) + '...';
+                const snippet = metaDesc || (bodyText.substring(0, 200) + '...');
 
-                if (bodyText.length > 100) {
+                if (bodyText.length > 50) {
                     const docId = ++docIdCounter;
-                    documents.set(docId, { url, title, snippet, wordCount: bodyText.length });
+                    documents.set(docId, { url, title, snippet, wordCount: bodyText.length, incomingLinks: 1 });
 
                     const tokens = tokenize(bodyText);
                     const termFreqs = new Map();
@@ -84,32 +86,37 @@ async function runCrawlerAgent(agentId) {
                     });
                 }
 
-                // Extract links to expand queue
+                // Robust Link Extraction with Absolute URL resolution
                 $('a[href]').each((_, element) => {
                     let href = $(element).attr('href');
-                    if (href && href.startsWith('http') && !globalVisited.has(href)) {
-                        urlQueue.push(href);
+                    try {
+                        if (href) {
+                            const absoluteUrl = new URL(href, url).href;
+                            if (absoluteUrl.startsWith('http') && !globalVisited.has(absoluteUrl)) {
+                                urlQueue.push(absoluteUrl);
+                            }
+                        }
+                    } catch (e) {
+                        // Skip malformed links
                     }
                 });
 
                 sitesCrawled++;
             } catch (error) {
-                // Skip failed requests silently to maintain crawler velocity
+                // Suppress network timeouts to keep crawler cycle smooth
             }
         }
 
-        // Refill queue if running low
         if (urlQueue.length < 50) {
             urlQueue.push('https://en.wikipedia.org/wiki/Special:Random');
             urlQueue.push('https://github.com/explore');
         }
 
-        console.log(`Crawler Agent [${agentId}] completed batch of ${sitesCrawled} sites. Resting for 2 minutes.`);
         await new Promise(resolve => setTimeout(resolve, REST_TIME_MS));
     }
 }
 
-// TF-IDF Ranking Engine
+// Enterprise TF-IDF and Authority Ranking Engine
 function rankDocuments(query) {
     const queryTokens = tokenize(query);
     if (queryTokens.length === 0 || documents.size === 0) return [];
@@ -127,7 +134,8 @@ function rankDocuments(query) {
         postingList.forEach((tf, docId) => {
             const doc = documents.get(docId);
             const tfidf = (tf / doc.wordCount) * idf * 10000;
-            scores.set(docId, (scores.get(docId) || 0) + tfidf);
+            const finalScore = tfidf * Math.log(1 + doc.incomingLinks);
+            scores.set(docId, (scores.get(docId) || 0) + finalScore);
         });
     });
 
@@ -144,7 +152,6 @@ function rankDocuments(query) {
         });
 }
 
-// API Endpoints
 app.get('/api/search', (req, res) => {
     const query = req.query.q || '';
     const startTime = process.hrtime();
@@ -161,12 +168,12 @@ app.get('/api/search', (req, res) => {
     });
 });
 
-// Boot up 35 parallel crawler agents
+// Boot up 35 autonomous crawler agents
 for (let i = 1; i <= NUM_CRAWLERS; i++) {
     runCrawlerAgent(i);
 }
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Snub Search Engine and Browser running on port ${PORT}`);
+    console.log(`Snub Search Engine running on port ${PORT}`);
 });
