@@ -313,7 +313,7 @@
                 <div class="dashboard" style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%;">
                     <h1 class="dashboard-logo">Snub</h1>
                     <div class="quick-search">
-                        <input type="text" id="search-input-${tabId}" placeholder="Search the web...">
+                        <input type="text" id="search-input-${tabId}" placeholder="Search the persistent database...">
                         <button onclick="triggerSearch(${tabId})">Search</button>
                     </div>
                 </div>
@@ -400,7 +400,7 @@
 
             dashboardEl.style.display = 'none';
             resultsContainer.style.display = 'flex';
-            resultsStats.textContent = 'Searching indexed database...';
+            resultsStats.textContent = 'Querying SQLite index...';
             resultsList.innerHTML = '';
 
             try {
@@ -410,7 +410,7 @@
                 resultsStats.textContent = `Found ${data.count} results from ${data.indexedDocs} indexed documents (${data.timeMs}ms)`;
 
                 if (data.results.length === 0) {
-                    resultsList.innerHTML = `<div class="result-snippet">No indexed documents match your search query yet. Crawlers are actively indexing pages.</div>`;
+                    resultsList.innerHTML = `<div class="result-snippet">No matches found in the index. Allow crawlers more time to harvest and index web links.</div>`;
                     return;
                 }
 
@@ -425,7 +425,7 @@
                     resultsList.appendChild(item);
                 });
             } catch (err) {
-                resultsStats.textContent = 'Failed to execute query against search index.';
+                resultsStats.textContent = 'Failed to execute query against database index.';
             }
         }
 
