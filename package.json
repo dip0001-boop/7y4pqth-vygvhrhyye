@@ -1,7 +1,7 @@
 {
-  "name": "snub-search-engine-enterprise",
-  "version": "4.0.0",
-  "description": "Persistent SQLite-backed multi-agent search engine and browser",
+  "name": "snub-live-search",
+  "version": "5.0.0",
+  "description": "Multi-tab browser with live real-time web search integration",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,8 +9,7 @@
   "dependencies": {
     "axios": "^1.7.2",
     "cheerio": "^1.0.0",
-    "express": "^4.19.2",
-    "sqlite3": "^5.1.7"
+    "express": "^4.19.2"
   },
   "engines": {
     "node": ">=18.0.0"
