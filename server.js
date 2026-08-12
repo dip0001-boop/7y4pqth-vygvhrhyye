@@ -1,131 +1,137 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const Database = require('better-sqlite3');
 const path = require('path');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+// ==========================================
+// 1. DATABASE SETUP (The Brain)
+// ==========================================
+// We use better-sqlite3 for ultra-fast, synchronous disk writes.
+const db = new Database('snub_index.db');
 
-// Autocomplete Endpoint
-app.get('/api/suggest', async (req, res) => {
-    const query = req.query.q || '';
-    if (!query) return res.json([]);
+// Enable FTS5 (Full-Text Search) with the Porter stemmer for advanced language processing
+db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS pages USING fts5(
+        url UNINDEXED, 
+        title, 
+        snippet, 
+        content,
+        tokenize='porter' 
+    );
+    CREATE TABLE IF NOT EXISTS crawled_urls (url TEXT PRIMARY KEY);
+`);
+
+const insertPage = db.prepare('INSERT INTO pages (url, title, snippet, content) VALUES (?, ?, ?, ?)');
+const markCrawled = db.prepare('INSERT OR IGNORE INTO crawled_urls (url) VALUES (?)');
+const checkCrawled = db.prepare('SELECT url FROM crawled_urls WHERE url = ?');
+
+// ==========================================
+// 2. THE CRAWLER (The Spider)
+// ==========================================
+// Call this endpoint to feed URLs into your engine.
+app.post('/api/crawl', async (req, res) => {
+    const { url } = req.body;
+    
+    if (!url) return res.status(400).json({ error: 'URL is required' });
+    if (checkCrawled.get(url)) return res.json({ message: 'URL already in index' });
+
     try {
-        const response = await axios.get(`https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(query)}`, {
-            headers: { 'User-Agent': USER_AGENT }
-        });
-        res.json(response.data[1] || []);
-    } catch (err) {
-        res.json([]);
-    }
-});
-
-// Robust Search Endpoint with Fallback Guarantee
-app.get('/api/search', async (req, res) => {
-    const query = req.query.q || '';
-    const page = parseInt(req.query.page || '1', 10);
-
-    if (!query) {
-        return res.json({ query: '', count: 0, page: 1, timeMs: '0.00', results: [] });
-    }
-
-    const startTime = process.hrtime();
-
-    try {
-        // Fetch via standard GET request with standard browser headers
-        const response = await axios.get(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-            headers: {
-                'User-Agent': USER_AGENT,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5'
-            },
+        console.log(`Crawling: ${url}...`);
+        const response = await axios.get(url, {
+            headers: { 'User-Agent': 'SnubBot/1.0 (+http://localhost:3000)' },
             timeout: 5000
         });
 
         const $ = cheerio.load(response.data);
-        const results = [];
+        
+        // Remove junk elements that mess up search results
+        $('script, style, noscript, nav, footer, iframe').remove();
 
-        // Parse results using updated selectors
-        $('.result, .web-result').each((_, element) => {
-            const titleEl = $(element).find('.result__title a, a.result__url');
-            const snippetEl = $(element).find('.result__snippet');
-            
-            const title = titleEl.text().trim();
-            let rawUrl = titleEl.attr('href') || '';
-            const snippet = snippetEl.text().trim();
+        const title = $('title').text().trim() || url;
+        const rawText = $('body').text().replace(/\s+/g, ' ').trim();
+        
+        // Create a short description for the search results page
+        const metaDesc = $('meta[name="description"]').attr('content');
+        const snippet = metaDesc ? metaDesc : rawText.substring(0, 160) + '...';
 
-            if (rawUrl.includes('uddg=')) {
-                try {
-                    const match = rawUrl.match(/uddg=([^&]+)/);
-                    if (match) rawUrl = decodeURIComponent(match[1]);
-                } catch (e) {}
-            }
+        if (rawText.length > 50) {
+            // Save to our SQLite Full-Text Index
+            insertPage.run(url, title, snippet, rawText);
+            markCrawled.run(url);
+            console.log(`Successfully indexed: ${title}`);
+            res.json({ success: true, title, url });
+        } else {
+            res.json({ success: false, message: 'Not enough text content to index.' });
+        }
+    } catch (error) {
+        console.error(`Failed to crawl ${url}:`, error.message);
+        res.status(500).json({ error: 'Crawl failed' });
+    }
+});
 
-            if (title && rawUrl && rawUrl.startsWith('http')) {
-                let domain = '';
-                try {
-                    domain = new URL(rawUrl).hostname;
-                } catch (e) {}
+// ==========================================
+// 3. THE SEARCH ALGORITHM
+// ==========================================
+app.get('/api/search', (req, res) => {
+    const query = req.query.q || '';
+    if (!query) return res.json({ query: '', count: 0, timeMs: '0.00', results: [] });
 
-                results.push({
-                    title,
-                    url: rawUrl,
-                    domain,
-                    snippet,
-                    favicon: domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : ''
-                });
-            }
+    const startTime = process.hrtime();
+
+    try {
+        // MATCH uses SQLite's built-in BM25 ranking algorithm to sort by relevance.
+        // We use the built-in snippet() function to highlight keywords with <b> tags!
+        const searchStmt = db.prepare(`
+            SELECT 
+                url, 
+                title, 
+                snippet(pages, 2, '<b>', '</b>', '...', 64) as highlighted_snippet 
+            FROM pages 
+            WHERE pages MATCH ? 
+            ORDER BY rank 
+            LIMIT 20
+        `);
+
+        // Clean the query to prevent SQLite syntax errors
+        const safeQuery = query.replace(/[^a-zA-Z0-9 ]/g, '').trim();
+        const results = searchStmt.all(safeQuery);
+
+        // Format for the frontend
+        const formattedResults = results.map(row => {
+            let domain = '';
+            try { domain = new URL(row.url).hostname; } catch (e) {}
+
+            return {
+                title: row.title,
+                url: row.url,
+                domain: domain,
+                snippet: row.highlighted_snippet, // Native bolding on matched words
+                favicon: domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : ''
+            };
         });
 
-        if (results.length > 0) {
-            const diff = process.hrtime(startTime);
-            const timeMs = (diff[0] * 1000 + diff[1] / 1e6).toFixed(2);
-            return res.json({ query, count: results.length, page, timeMs, results });
-        }
-        
-        throw new Error('Zero results parsed from HTML stream.');
-
-    } catch (error) {
-        // Smart Fallback Guarantee: Ensures the browser always outputs responsive results
         const diff = process.hrtime(startTime);
         const timeMs = (diff[0] * 1000 + diff[1] / 1e6).toFixed(2);
-        
+
         res.json({
             query,
-            count: 3,
-            page,
+            count: formattedResults.length,
             timeMs,
-            results: [
-                {
-                    title: `Comprehensive Guide & Resources for "${query}"`,
-                    url: `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(query)}`,
-                    domain: 'wikipedia.org',
-                    snippet: `Explore encyclopedic references, documentation, background history, and definitions regarding ${query}.`,
-                    favicon: 'https://www.google.com/s2/favicons?domain=wikipedia.org&sz=32'
-                },
-                {
-                    title: `${query}: Repositories, Source Code, and Tools`,
-                    url: `https://github.com/search?q=${encodeURIComponent(query)}`,
-                    domain: 'github.com',
-                    snippet: `Discover top open-source software libraries, code examples, and active community projects related to ${query}.`,
-                    favicon: 'https://www.google.com/s2/favicons?domain=github.com&sz=32'
-                },
-                {
-                    title: `Expert Troubleshooting & Q&A Discussions on ${query}`,
-                    url: `https://stackoverflow.com/search?q=${encodeURIComponent(query)}`,
-                    domain: 'stackoverflow.com',
-                    snippet: `Browse developer solutions, code debugging tips, and technical answers concerning ${query}.`,
-                    favicon: 'https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=32'
-                }
-            ]
+            results: formattedResults
         });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Search calculation failed' });
     }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Snub Engine active on http://localhost:${PORT}`);
+    console.log(`Snub Custom Engine active on http://localhost:${PORT}`);
 });
