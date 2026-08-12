@@ -1,7 +1,7 @@
 {
-  "name": "snub-search-engine",
-  "version": "3.0.0",
-  "description": "Enterprise grade multi-agent crawler, inverted indexer, and search ranking engine",
+  "name": "snub-search-engine-enterprise",
+  "version": "4.0.0",
+  "description": "Persistent SQLite-backed multi-agent search engine and browser",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,7 +9,8 @@
   "dependencies": {
     "axios": "^1.7.2",
     "cheerio": "^1.0.0",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7"
   },
   "engines": {
     "node": ">=18.0.0"
