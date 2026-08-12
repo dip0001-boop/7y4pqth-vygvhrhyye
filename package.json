@@ -1,7 +1,7 @@
 {
   "name": "snub-search-engine",
-  "version": "1.0.0",
-  "description": "High performance web crawler, indexer and search engine",
+  "version": "2.0.0",
+  "description": "Autonomous multi-agent crawler, inverted index, and multi-tab browser engine",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
