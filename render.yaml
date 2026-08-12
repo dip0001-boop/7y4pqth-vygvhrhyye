@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: your-app-name
+    env: node
+    # Forces Render to use Node 22 instead of defaulting to 26
+    nodeVersion: 22.x
+    buildCommand: npm install
+    startCommand: npm start
+    # Creates a persistent disk so your SQLite database isn't deleted on redeploys
+    disk:
+      name: sqlite-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
