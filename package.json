@@ -2,9 +2,9 @@
   "name": "your-app-name",
   "version": "1.0.0",
   "description": "Your Node.js app using SQLite",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node server.js",
     "build": "npm install"
   },
   "engines": {
