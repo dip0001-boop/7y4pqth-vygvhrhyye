@@ -238,6 +238,9 @@
         .result-url {
             font-size: 12px;
             color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .result-title {
@@ -288,10 +291,7 @@
             const tabData = {
                 id: tabId,
                 title: 'New Tab',
-                url: initialUrl,
-                mode: 'home',
-                query: '',
-                resultsData: null
+                url: initialUrl
             };
 
             tabs.push(tabData);
@@ -313,7 +313,7 @@
                 <div class="dashboard" style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%;">
                     <h1 class="dashboard-logo">Snub</h1>
                     <div class="quick-search">
-                        <input type="text" id="search-input-${tabId}" placeholder="Search the persistent database...">
+                        <input type="text" id="search-input-${tabId}" placeholder="Search the web instantly...">
                         <button onclick="triggerSearch(${tabId})">Search</button>
                     </div>
                 </div>
@@ -357,9 +357,7 @@
         function closeTab(event, tabId) {
             event.stopPropagation();
 
-            if (tabs.length === 1) {
-                return;
-            }
+            if (tabs.length === 1) return;
 
             const tabIndex = tabs.findIndex(t => t.id === tabId);
             if (tabIndex === -1) return;
@@ -400,17 +398,17 @@
 
             dashboardEl.style.display = 'none';
             resultsContainer.style.display = 'flex';
-            resultsStats.textContent = 'Querying SQLite index...';
+            resultsStats.textContent = 'Fetching live web results...';
             resultsList.innerHTML = '';
 
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const data = await response.json();
 
-                resultsStats.textContent = `Found ${data.count} results from ${data.indexedDocs} indexed documents (${data.timeMs}ms)`;
+                resultsStats.textContent = `About ${data.count} live results (${data.timeMs}ms)`;
 
                 if (data.results.length === 0) {
-                    resultsList.innerHTML = `<div class="result-snippet">No matches found in the index. Allow crawlers more time to harvest and index web links.</div>`;
+                    resultsList.innerHTML = `<div class="result-snippet">No results found for your query. Try different keywords.</div>`;
                     return;
                 }
 
@@ -425,7 +423,7 @@
                     resultsList.appendChild(item);
                 });
             } catch (err) {
-                resultsStats.textContent = 'Failed to execute query against database index.';
+                resultsStats.textContent = 'Error connecting to live search engine.';
             }
         }
 
