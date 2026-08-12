@@ -7,12 +7,11 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-Memory Search Engine State
+// Engine State
 const documents = new Map(); // docId -> { url, title, snippet, wordCount }
 const invertedIndex = new Map(); // term -> Map(docId -> termFrequency)
 let docIdCounter = 0;
 
-// Stop words filter for cleaner index quality
 const STOP_WORDS = new Set(['the', 'is', 'at', 'which', 'and', 'a', 'an', 'in', 'to', 'of', 'for', 'on', 'with', 'as', 'by', 'this', 'it', 'from']);
 
 function tokenize(text) {
@@ -20,77 +19,94 @@ function tokenize(text) {
     return text.toLowerCase()
         .replace(/[^\w\s]/gi, ' ')
         .split(/\s+/)
-        .filter(token => token.length > 2 && !STOP_WORDS.has(token));
+        .filter(token => token.length > 0 && !STOP_WORDS.has(token));
 }
 
-// High Performance Asynchronous Crawler & Indexer
-async function crawlAndIndex(startUrl, maxDepth = 2) {
-    const visited = new Set();
-    const queue = [{ url: startUrl, depth: 0 }];
+// Global Crawler Queue and Visited Registry
+const globalVisited = new Set();
+const urlQueue = [
+    'https://en.wikipedia.org/wiki/Main_Page',
+    'https://www.wikipedia.org',
+    'https://news.ycombinator.com/',
+    'https://github.com/trending',
+    'https://www.bbc.com/news',
+    'https://www.cnn.com',
+    'https://stackoverflow.com/',
+    'https://developer.mozilla.org/'
+];
 
-    console.log(`Starting crawl process from seed: ${startUrl}`);
+const NUM_CRAWLERS = 35;
+const SITES_PER_CYCLE = 100;
+const REST_TIME_MS = 120000; // 2 minutes rest
 
-    while (queue.length > 0 && visited.size < 50) { // Limit initial crawl size for fast execution on Render free tier
-        const { url, depth } = queue.shift();
+async function runCrawlerAgent(agentId) {
+    while (true) {
+        let sitesCrawled = 0;
 
-        if (visited.has(url) || depth > maxDepth) continue;
-        visited.add(url);
+        while (sitesCrawled < SITES_PER_CYCLE && urlQueue.length > 0) {
+            const url = urlQueue.shift();
+            if (globalVisited.has(url)) continue;
+            globalVisited.add(url);
 
-        try {
-            const response = await axios.get(url, { 
-                timeout: 5000,
-                headers: { 'User-Agent': 'SnubBot/1.0 (Autonomous Web Crawler)' }
-            });
+            try {
+                const response = await axios.get(url, {
+                    timeout: 4000,
+                    headers: { 'User-Agent': `SnubCrawlerAgent-${agentId}/2.0` }
+                });
 
-            const $ = cheerio.load(response.data);
-            const title = $('title').text().trim() || url;
-            
-            // Remove scripts, styles, and junk tags
-            $('script').remove();
-            $('style').remove();
-            $('nav').remove();
-            $('footer').remove();
+                const $ = cheerio.load(response.data);
+                const title = $('title').text().trim() || url;
 
-            const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
-            const snippet = bodyText.substring(0, 180) + '...';
+                $('script').remove();
+                $('style').remove();
+                $('nav').remove();
+                $('footer').remove();
+                $('header').remove();
 
-            const docId = ++docIdCounter;
-            documents.set(docId, { url, title, snippet, wordCount: bodyText.length });
+                const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+                const snippet = bodyText.substring(0, 200) + '...';
 
-            // Tokenize and build Inverted Index
-            const tokens = tokenize(bodyText);
-            const termFreqs = new Map();
-            tokens.forEach(token => {
-                termFreqs.set(token, (termFreqs.get(token) || 0) + 1);
-            });
+                if (bodyText.length > 100) {
+                    const docId = ++docIdCounter;
+                    documents.set(docId, { url, title, snippet, wordCount: bodyText.length });
 
-            termFreqs.forEach((tf, term) => {
-                if (!invertedIndex.has(term)) {
-                    invertedIndex.set(term, new Map());
+                    const tokens = tokenize(bodyText);
+                    const termFreqs = new Map();
+                    tokens.forEach(token => {
+                        termFreqs.set(token, (termFreqs.get(token) || 0) + 1);
+                    });
+
+                    termFreqs.forEach((tf, term) => {
+                        if (!invertedIndex.has(term)) {
+                            invertedIndex.set(term, new Map());
+                        }
+                        invertedIndex.get(term).set(docId, tf);
+                    });
                 }
-                invertedIndex.get(term).set(docId, tf);
-            });
 
-            // Extract links for crawler recursion
-            if (depth < maxDepth) {
+                // Extract links to expand queue
                 $('a[href]').each((_, element) => {
                     let href = $(element).attr('href');
-                    try {
-                        if (href && href.startsWith('http')) {
-                            queue.push({ url: href, depth: depth + 1 });
-                        }
-                    } catch (e) {
-                        // Skip malformed links
+                    if (href && href.startsWith('http') && !globalVisited.has(href)) {
+                        urlQueue.push(href);
                     }
                 });
-            }
 
-            console.log(`Indexed [Doc ${docId}]: ${url}`);
-        } catch (error) {
-            console.error(`Failed to crawl ${url}: ${error.message}`);
+                sitesCrawled++;
+            } catch (error) {
+                // Skip failed requests silently to maintain crawler velocity
+            }
         }
+
+        // Refill queue if running low
+        if (urlQueue.length < 50) {
+            urlQueue.push('https://en.wikipedia.org/wiki/Special:Random');
+            urlQueue.push('https://github.com/explore');
+        }
+
+        console.log(`Crawler Agent [${agentId}] completed batch of ${sitesCrawled} sites. Resting for 2 minutes.`);
+        await new Promise(resolve => setTimeout(resolve, REST_TIME_MS));
     }
-    console.log(`Crawl completed. Total indexed documents: ${documents.size}`);
 }
 
 // TF-IDF Ranking Engine
@@ -98,7 +114,7 @@ function rankDocuments(query) {
     const queryTokens = tokenize(query);
     if (queryTokens.length === 0 || documents.size === 0) return [];
 
-    const scores = new Map(); // docId -> score
+    const scores = new Map();
     const totalDocs = documents.size;
 
     queryTokens.forEach(term => {
@@ -106,21 +122,16 @@ function rankDocuments(query) {
 
         const postingList = invertedIndex.get(term);
         const docFrequency = postingList.size;
-        
-        // Inverse Document Frequency (IDF)
         const idf = Math.log(1 + (totalDocs / docFrequency));
 
         postingList.forEach((tf, docId) => {
-            // Term Frequency (TF) normalized by document length factor
             const doc = documents.get(docId);
-            const tfidf = (tf / doc.wordCount) * idf * 10000; 
-
+            const tfidf = (tf / doc.wordCount) * idf * 10000;
             scores.set(docId, (scores.get(docId) || 0) + tfidf);
         });
     });
 
-    // Sort results by highest score descending
-    const rankedResults = Array.from(scores.entries())
+    return Array.from(scores.entries())
         .sort((a, b) => b[1] - a[1])
         .map(([docId, score]) => {
             const doc = documents.get(docId);
@@ -131,53 +142,31 @@ function rankDocuments(query) {
                 score: score.toFixed(2)
             };
         });
-
-    return rankedResults;
 }
 
-// API Routes
+// API Endpoints
 app.get('/api/search', (req, res) => {
     const query = req.query.q || '';
     const startTime = process.hrtime();
-    
     const results = rankDocuments(query);
-    
     const diff = process.hrtime(startTime);
     const searchTimeMs = (diff[0] * 1000 + diff[1] / 1e6).toFixed(2);
 
     res.json({
         query,
         count: results.length,
+        indexedDocs: documents.size,
         timeMs: searchTimeMs,
         results
     });
 });
 
-app.post('/api/crawl', async (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'URL is required' });
-    
-    // Trigger background crawl
-    crawlAndIndex(url, 1);
-    res.json({ status: 'Crawling initiated in background', url });
-});
-
-// Seed initial popular URLs on startup so search returns immediate results
-const SEED_URLS = [
-    'https://en.wikipedia.org/wiki/Web_crawler',
-    'https://en.wikipedia.org/wiki/Search_engine_indexing',
-    'https://en.wikipedia.org/wiki/Information_retrieval'
-];
-
-async function seedEngine() {
-    for (const url of SEED_URLS) {
-        await crawlAndIndex(url, 0);
-    }
+// Boot up 35 parallel crawler agents
+for (let i = 1; i <= NUM_CRAWLERS; i++) {
+    runCrawlerAgent(i);
 }
 
-seedEngine().then(() => {
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-        console.log(`Snub Engine running on port ${PORT}`);
-    });
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Snub Search Engine and Browser running on port ${PORT}`);
 });
