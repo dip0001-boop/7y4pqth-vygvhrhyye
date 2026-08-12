@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snub Browser</title>
+    <title>Snub Engine & Web Spider</title>
     <style>
         :root {
             --bg-window: #0d1117;
@@ -16,697 +16,259 @@
             --text-main: #f0f6fc;
             --text-muted: #8b949e;
             --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
             --card-bg: #161b22;
             --hover-bg: rgba(255, 255, 255, 0.08);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-window); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-        body {
-            background-color: var(--bg-window);
-            color: var(--text-main);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+        .browser-chrome { background-color: var(--toolbar-bg); border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .top-row { display: flex; align-items: center; height: 40px; padding: 0 12px; gap: 8px; }
+        .app-brand { font-weight: 800; font-size: 15px; background: linear-gradient(135deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .tabs-container { display: flex; align-items: center; gap: 4px; flex: 1; margin-left: 12px; }
+        .tab { display: flex; align-items: center; background-color: transparent; color: var(--tab-text-inactive); padding: 0 16px; height: 34px; border-radius: 8px 8px 0 0; font-size: 13px; cursor: pointer; user-select: none; }
+        .tab.active { background-color: var(--tab-bg-active); color: var(--tab-text-active); border-top: 2px solid var(--accent-blue); }
 
-        /* Top Navigation Chrome */
-        .browser-chrome {
-            background-color: var(--toolbar-bg);
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-        }
+        .browser-viewport { flex: 1; display: flex; flex-direction: column; overflow-y: auto; align-items: center; position: relative; }
+        .view-pane { display: none; width: 100%; max-width: 780px; padding: 40px 20px; flex-direction: column; gap: 24px; }
+        .view-pane.active { display: flex; }
 
-        .top-row {
-            display: flex;
-            align-items: center;
-            height: 40px;
-            padding: 0 8px;
-            gap: 8px;
-        }
+        /* Search Interface */
+        .logo-section { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 40px; }
+        .dashboard-logo { font-size: 64px; font-weight: 900; background: linear-gradient(135deg, #58a6ff 0%, #bc8cff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1.5px; }
+        .tagline { font-size: 13px; color: var(--text-muted); }
 
-        .app-brand {
-            font-weight: 700;
-            font-size: 14px;
-            background: linear-gradient(135deg, #58a6ff, #bc8cff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            padding: 0 8px;
-        }
+        .search-box-wrapper { position: relative; width: 100%; }
+        .search-input-group { display: flex; background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 24px; padding: 8px 16px; gap: 12px; align-items: center; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+        .search-input-group:focus-within { border-color: var(--accent-blue); }
+        .search-input-group input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 16px; outline: none; padding: 6px 0; }
+        .search-input-group button { background-color: var(--accent-blue); color: #000; font-weight: 600; border: none; padding: 8px 20px; border-radius: 16px; cursor: pointer; }
 
-        .tabs-container {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            flex: 1;
-            overflow-x: auto;
-            height: 100%;
-            padding-top: 6px;
-        }
+        .suggestions-dropdown { position: absolute; top: 105%; left: 0; right: 0; background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 100; display: none; overflow: hidden; }
+        .suggestion-item { padding: 12px 20px; font-size: 14px; color: var(--text-main); cursor: pointer; display: flex; align-items: center; gap: 10px; }
+        .suggestion-item:hover { background-color: var(--hover-bg); color: var(--accent-blue); }
 
-        .tab {
-            display: flex;
-            align-items: center;
-            background-color: transparent;
-            color: var(--tab-text-inactive);
-            padding: 0 12px;
-            height: 34px;
-            border-radius: 8px 8px 0 0;
-            font-size: 12px;
-            gap: 8px;
-            min-width: 140px;
-            max-width: 200px;
-            cursor: pointer;
-            user-select: none;
-        }
+        /* Results Display */
+        .results-header { font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
+        .result-item { display: flex; flex-direction: column; gap: 4px; }
+        .result-meta { display: flex; align-items: center; gap: 8px; }
+        .result-favicon { width: 16px; height: 16px; border-radius: 3px; }
+        .result-domain { font-size: 12px; color: var(--text-muted); }
+        .result-title { font-size: 18px; color: var(--accent-blue); text-decoration: none; font-weight: 500; }
+        .result-title:hover { text-decoration: underline; }
+        .result-snippet { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+        .result-snippet b { color: var(--text-main); font-weight: 700; background-color: rgba(88, 166, 255, 0.15); padding: 0 2px; border-radius: 2px; }
 
-        .tab.active {
-            background-color: var(--tab-bg-active);
-            color: var(--tab-text-active);
-            border-top: 2px solid var(--accent-blue);
-        }
+        /* Admin / Crawler Dashboard */
+        .admin-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+        .admin-card h2 { font-size: 18px; color: var(--text-main); }
+        .crawl-form { display: flex; gap: 10px; }
+        .crawl-form input { flex: 1; background-color: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px 14px; border-radius: 6px; font-size: 14px; outline: none; }
+        .crawl-form button { background-color: var(--accent-green); color: #000; font-weight: 600; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; }
+        
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .stat-box { background-color: var(--input-bg); border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; text-align: center; }
+        .stat-val { font-size: 22px; font-weight: 700; color: var(--accent-blue); }
+        .stat-lbl { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
-        .tab-title {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .tab-close {
-            font-size: 14px;
-            border-radius: 50%;
-            width: 18px;
-            height: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .tab-close:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-            color: var(--text-main);
-        }
-
-        .btn-icon {
-            background: transparent;
-            border: none;
-            color: var(--tab-text-inactive);
-            width: 30px;
-            height: 30px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .btn-icon:hover {
-            background-color: var(--hover-bg);
-            color: var(--text-main);
-        }
-
-        .nav-row {
-            display: flex;
-            align-items: center;
-            height: 44px;
-            padding: 0 12px;
-            gap: 8px;
-            background-color: var(--tab-bg-active);
-            border-top: 1px solid var(--border-color);
-        }
-
-        .url-bar-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            background-color: var(--input-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 20px;
-            padding: 0 14px;
-            height: 32px;
-        }
-
-        .url-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            font-size: 13px;
-            outline: none;
-        }
-
-        /* Viewport & Panes */
-        .browser-viewport {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            align-items: center;
-            position: relative;
-        }
-
-        .view-pane {
-            display: none;
-            width: 100%;
-            max-width: 750px;
-            padding: 40px 20px;
-            flex-direction: column;
-            gap: 24px;
-        }
-
-        .view-pane.active {
-            display: flex;
-        }
-
-        /* Home Dashboard */
-        .dashboard {
-            align-items: center;
-            margin-top: 60px;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-            width: 100%;
-        }
-
-        .dashboard-logo {
-            font-size: 56px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #58a6ff 0%, #bc8cff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -1px;
-        }
-
-        /* Search Input & Suggestions */
-        .search-box-wrapper {
-            position: relative;
-            width: 100%;
-        }
-
-        .search-input-group {
-            display: flex;
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 24px;
-            padding: 10px 20px;
-            gap: 12px;
-            align-items: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-
-        .search-input-group:focus-within {
-            border-color: var(--accent-blue);
-        }
-
-        .search-input-group input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            font-size: 15px;
-            outline: none;
-        }
-
-        .search-input-group button {
-            background-color: var(--accent-blue);
-            color: #000;
-            font-weight: 600;
-            border: none;
-            padding: 8px 18px;
-            border-radius: 16px;
-            cursor: pointer;
-        }
-
-        .suggestions-dropdown {
-            position: absolute;
-            top: 105%;
-            left: 0;
-            right: 0;
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            z-index: 100;
-            display: none;
-            overflow: hidden;
-        }
-
-        .suggestion-item {
-            padding: 10px 20px;
-            font-size: 14px;
-            color: var(--text-main);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .suggestion-item:hover {
-            background-color: var(--hover-bg);
-            color: var(--accent-blue);
-        }
-
-        /* Results List */
-        .results-header {
-            font-size: 13px;
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 12px;
-        }
-
-        .instant-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-left: 4px solid var(--accent-blue);
-            border-radius: 8px;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .instant-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--accent-blue);
-        }
-
-        .instant-snippet {
-            font-size: 14px;
-            line-height: 1.5;
-            color: var(--text-main);
-        }
-
-        .result-item {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .result-meta {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .result-favicon {
-            width: 16px;
-            height: 16px;
-            border-radius: 3px;
-        }
-
-        .result-domain {
-            font-size: 12px;
-            color: var(--text-muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .result-title {
-            font-size: 18px;
-            color: var(--accent-blue);
-            text-decoration: none;
-            font-weight: 500;
-            line-height: 1.3;
-        }
-
-        .result-title:hover {
-            text-decoration: underline;
-        }
-
-        .result-snippet {
-            font-size: 14px;
-            color: var(--text-muted);
-            line-height: 1.5;
-        }
-
-        /* Pagination */
-        .pagination {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            margin-top: 20px;
-            padding-bottom: 40px;
-        }
-
-        .page-btn {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            padding: 8px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        .page-btn.active {
-            background-color: var(--accent-blue);
-            color: #000;
-            font-weight: 600;
-            border-color: var(--accent-blue);
-        }
-
-        .page-btn:hover:not(.active) {
-            background-color: var(--hover-bg);
-        }
+        .log-terminal { background-color: #000; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; height: 200px; overflow-y: auto; color: #7ee787; display: flex; flex-direction: column; gap: 4px; }
     </style>
 </head>
 <body>
 
     <div class="browser-chrome">
         <div class="top-row">
-            <div class="app-brand">Snub</div>
-            <div class="tabs-container" id="tabsContainer"></div>
-            <button class="btn-icon" id="newTabBtn" title="New Tab">+</button>
-        </div>
-        <div class="nav-row">
-            <button class="btn-icon" onclick="navigateHistory(-1)" title="Back">←</button>
-            <button class="btn-icon" onclick="navigateHistory(1)" title="Forward">→</button>
-            <button class="btn-icon" onclick="reloadTab()" title="Reload">↻</button>
-            <div class="url-bar-container">
-                <input type="text" class="url-input" id="urlInput" readonly>
+            <div class="app-brand">Snub OS</div>
+            <div class="tabs-container">
+                <div class="tab active" id="tab-search-btn" onclick="switchTab('search')">🔍 Web Search</div>
+                <div class="tab" id="tab-spider-btn" onclick="switchTab('spider')">🕷️ Spider & Control Panel</div>
             </div>
         </div>
     </div>
 
-    <div class="browser-viewport" id="viewport"></div>
+    <div class="browser-viewport">
+        <!-- Pane 1: Search Engine -->
+        <div class="view-pane active" id="pane-search">
+            <div class="logo-section">
+                <h1 class="dashboard-logo">Snub</h1>
+                <p class="tagline">Independent SQLite FTS5 Full-Text Search Engine</p>
+            </div>
+
+            <div class="search-box-wrapper">
+                <div class="search-input-group">
+                    <input type="text" id="searchInput" placeholder="Search your custom indexed web..." autocomplete="off">
+                    <button onclick="runSearch()">Search</button>
+                </div>
+                <div class="suggestions-dropdown" id="suggestions"></div>
+            </div>
+
+            <div class="results-header" id="resultsStats" style="display: none;"></div>
+            <div id="resultsList" style="display: flex; flex-direction: column; gap: 24px;"></div>
+        </div>
+
+        <!-- Pane 2: Spider Control Panel -->
+        <div class="view-pane" id="pane-spider">
+            <div class="admin-card">
+                <h2>Web Crawler Manager</h2>
+                <p style="font-size: 13px; color: var(--text-muted);">Seed a starting URL to crawl, extract text, and build your search index automatically.</p>
+                
+                <div class="crawl-form">
+                    <input type="url" id="seedUrl" placeholder="https://en.wikipedia.org/wiki/Search_engine" required>
+                    <button onclick="startCrawl()">Crawl & Index</button>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-val" id="statIndexed">0</div>
+                        <div class="stat-lbl">Indexed Pages</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-val" id="statQueue">0</div>
+                        <div class="stat-lbl">Queued Links</div>
+                    </div>
+                </div>
+
+                <h2>Crawler Live Output</h2>
+                <div class="log-terminal" id="logTerminal">Initializing spider interface...</div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        let tabs = [];
-        let activeTabId = null;
-        let tabIdCounter = 0;
-
-        const tabsContainer = document.getElementById('tabsContainer');
-        const viewport = document.getElementById('viewport');
-        const urlInput = document.getElementById('urlInput');
-
-        function createTab(initialUrl = 'snub://home') {
-            const tabId = ++tabIdCounter;
-            const tabData = {
-                id: tabId,
-                title: 'New Tab',
-                url: initialUrl,
-                query: '',
-                currentPage: 1,
-                history: [initialUrl],
-                historyIndex: 0
-            };
-
-            tabs.push(tabData);
-
-            const tabEl = document.createElement('div');
-            tabEl.className = 'tab';
-            tabEl.id = `tab-btn-${tabId}`;
-            tabEl.innerHTML = `
-                <span class="tab-title" id="tab-title-${tabId}">New Tab</span>
-                <span class="tab-close" onclick="closeTab(event, ${tabId})">&times;</span>
-            `;
-            tabEl.onclick = () => switchTab(tabId);
-            tabsContainer.appendChild(tabEl);
-
-            const paneEl = document.createElement('div');
-            paneEl.className = 'view-pane';
-            paneEl.id = `pane-${tabId}`;
-            paneEl.innerHTML = `
-                <div class="dashboard" id="dashboard-${tabId}">
-                    <h1 class="dashboard-logo">Snub</h1>
-                    <div class="search-box-wrapper">
-                        <div class="search-input-group">
-                            <input type="text" id="search-input-${tabId}" placeholder="Search the web with Snub..." autocomplete="off">
-                            <button onclick="triggerSearch(${tabId}, 1)">Search</button>
-                        </div>
-                        <div class="suggestions-dropdown" id="suggestions-${tabId}"></div>
-                    </div>
-                </div>
-                <div class="results-container" id="results-container-${tabId}" style="display: none; flex-direction: column; gap: 20px;">
-                    <div class="search-box-wrapper">
-                        <div class="search-input-group">
-                            <input type="text" id="results-search-input-${tabId}" placeholder="Search the web..." autocomplete="off">
-                            <button onclick="triggerSearch(${tabId}, 1, true)">Search</button>
-                        </div>
-                        <div class="suggestions-dropdown" id="results-suggestions-${tabId}"></div>
-                    </div>
-                    <div class="results-header" id="results-stats-${tabId}"></div>
-                    <div id="instant-card-${tabId}" style="display: none;"></div>
-                    <div id="results-list-${tabId}" style="display: flex; flex-direction: column; gap: 24px;"></div>
-                    <div class="pagination" id="pagination-${tabId}"></div>
-                </div>
-            `;
-            viewport.appendChild(paneEl);
-
-            bindEvents(tabId);
-            switchTab(tabId);
-        }
-
-        function bindEvents(tabId) {
-            const homeInput = document.getElementById(`search-input-${tabId}`);
-            const resultsInput = document.getElementById(`results-search-input-${tabId}`);
-
-            setupAutocomplete(homeInput, `suggestions-${tabId}`, tabId);
-            setupAutocomplete(resultsInput, `results-suggestions-${tabId}`, tabId);
-        }
-
-        function setupAutocomplete(inputEl, dropdownId, tabId) {
-            const dropdown = document.getElementById(dropdownId);
-            let timer = null;
-
-            inputEl.addEventListener('input', () => {
-                clearTimeout(timer);
-                const query = inputEl.value.trim();
-                if (!query) {
-                    dropdown.style.display = 'none';
-                    return;
-                }
-
-                timer = setTimeout(async () => {
-                    try {
-                        const res = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`);
-                        const suggestions = await res.json();
-
-                        if (suggestions.length === 0) {
-                            dropdown.style.display = 'none';
-                            return;
-                        }
-
-                        dropdown.innerHTML = suggestions.map(s => `
-                            <div class="suggestion-item" onclick="selectSuggestion('${tabId}', '${s.replace(/'/g, "\\'")}')">
-                                🔍 ${s}
-                            </div>
-                        `).join('');
-                        dropdown.style.display = 'block';
-                    } catch (e) {
-                        dropdown.style.display = 'none';
-                    }
-                }, 150);
-            });
-
-            inputEl.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    dropdown.style.display = 'none';
-                    triggerSearch(tabId, 1, inputEl.id.includes('results'));
-                }
-            });
-
-            document.addEventListener('click', (e) => {
-                if (!inputEl.contains(e.target) && !dropdown.contains(e.target)) {
-                    dropdown.style.display = 'none';
-                }
-            });
-        }
-
-        function selectSuggestion(tabId, text) {
-            const homeInput = document.getElementById(`search-input-${tabId}`);
-            const resultsInput = document.getElementById(`results-search-input-${tabId}`);
-            if (homeInput) homeInput.value = text;
-            if (resultsInput) resultsInput.value = text;
-
-            document.getElementById(`suggestions-${tabId}`).style.display = 'none';
-            document.getElementById(`results-suggestions-${tabId}`).style.display = 'none';
-
-            triggerSearch(tabId, 1);
-        }
-
-        function switchTab(tabId) {
-            activeTabId = tabId;
-
+        function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.view-pane').forEach(p => p.classList.remove('active'));
 
-            const tabBtn = document.getElementById(`tab-btn-${tabId}`);
-            const paneEl = document.getElementById(`pane-${tabId}`);
-
-            if (tabBtn) tabBtn.classList.add('active');
-            if (paneEl) paneEl.classList.add('active');
-
-            const currentTab = tabs.find(t => t.id === tabId);
-            if (currentTab) {
-                urlInput.value = currentTab.url;
+            if (tab === 'search') {
+                document.getElementById('tab-search-btn').classList.add('active');
+                document.getElementById('pane-search').classList.add('active');
+            } else {
+                document.getElementById('tab-spider-btn').classList.add('active');
+                document.getElementById('pane-spider').classList.add('active');
             }
         }
 
-        function closeTab(event, tabId) {
-            event.stopPropagation();
-            if (tabs.length === 1) return;
+        // Search Engine Functionality
+        const searchInput = document.getElementById('searchInput');
+        const suggestionsDropdown = document.getElementById('suggestions');
 
-            const tabIndex = tabs.findIndex(t => t.id === tabId);
-            if (tabIndex === -1) return;
-
-            tabs.splice(tabIndex, 1);
-
-            document.getElementById(`tab-btn-${tabId}`)?.remove();
-            document.getElementById(`pane-${tabId}`)?.remove();
-
-            if (activeTabId === tabId) {
-                const nextTab = tabs[Math.max(0, tabIndex - 1)];
-                switchTab(nextTab.id);
+        let suggestTimer = null;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(suggestTimer);
+            const query = searchInput.value.trim();
+            if (query.length < 2) {
+                suggestionsDropdown.style.display = 'none';
+                return;
             }
+
+            suggestTimer = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`);
+                    const suggestions = await res.json();
+                    if (suggestions.length === 0) {
+                        suggestionsDropdown.style.display = 'none';
+                        return;
+                    }
+
+                    suggestionsDropdown.innerHTML = suggestions.map(s => `
+                        <div class="suggestion-item" onclick="applySuggestion('${s.replace(/'/g, "\\'")}')">
+                            🔍 ${s}
+                        </div>
+                    `).join('');
+                    suggestionsDropdown.style.display = 'block';
+                } catch (e) { suggestionsDropdown.style.display = 'none'; }
+            }, 150);
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                suggestionsDropdown.style.display = 'none';
+                runSearch();
+            }
+        });
+
+        function applySuggestion(text) {
+            searchInput.value = text;
+            suggestionsDropdown.style.display = 'none';
+            runSearch();
         }
 
-        async function triggerSearch(tabId, page = 1, isFromResultsInput = false) {
-            const homeInput = document.getElementById(`search-input-${tabId}`);
-            const resultsInput = document.getElementById(`results-search-input-${tabId}`);
-
-            let query = isFromResultsInput ? resultsInput.value.trim() : homeInput.value.trim();
-            if (!query && isFromResultsInput) query = homeInput.value.trim();
+        async function runSearch() {
+            const query = searchInput.value.trim();
             if (!query) return;
 
-            // Sync inputs
-            homeInput.value = query;
-            resultsInput.value = query;
+            const statsEl = document.getElementById('resultsStats');
+            const listEl = document.getElementById('resultsList');
 
-            const tab = tabs.find(t => t.id === tabId);
-            if (!tab) return;
-
-            tab.query = query;
-            tab.currentPage = page;
-            tab.url = `snub://search?q=${encodeURIComponent(query)}&page=${page}`;
-            tab.title = query;
-            document.getElementById(`tab-title-${tabId}`).textContent = query;
-
-            if (tab.history[tab.historyIndex] !== tab.url) {
-                tab.history = tab.history.slice(0, tab.historyIndex + 1);
-                tab.history.push(tab.url);
-                tab.historyIndex = tab.history.length - 1;
-            }
-
-            if (activeTabId === tabId) {
-                urlInput.value = tab.url;
-            }
-
-            const pane = document.getElementById(`pane-${tabId}`);
-            const dashboardEl = pane.querySelector(`#dashboard-${tabId}`);
-            const resultsContainer = pane.querySelector(`#results-container-${tabId}`);
-            const resultsStats = pane.querySelector(`#results-stats-${tabId}`);
-            const instantCard = pane.querySelector(`#instant-card-${tabId}`);
-            const resultsList = pane.querySelector(`#results-list-${tabId}`);
-            const paginationEl = pane.querySelector(`#pagination-${tabId}`);
-
-            dashboardEl.style.display = 'none';
-            resultsContainer.style.display = 'flex';
-            resultsStats.textContent = 'Fetching live web search results...';
-            instantCard.style.display = 'none';
-            resultsList.innerHTML = '';
-            paginationEl.innerHTML = '';
+            statsEl.style.display = 'block';
+            statsEl.textContent = 'Searching index...';
+            listEl.innerHTML = '';
 
             try {
-                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&page=${page}`);
-                const data = await response.json();
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const data = await res.json();
 
-                resultsStats.textContent = `About ${data.count} live results (${data.timeMs}ms) — Page ${page}`;
-
-                // Render Instant Answer Card if present
-                if (data.instantAnswer) {
-                    instantCard.className = 'instant-card';
-                    instantCard.innerHTML = `
-                        <div class="instant-title">${data.instantAnswer.title}</div>
-                        <div class="instant-snippet">${data.instantAnswer.snippet}</div>
-                    `;
-                    instantCard.style.display = 'block';
-                }
+                statsEl.textContent = `Found ${data.count} results (${data.timeMs} ms) for "${query}"`;
 
                 if (data.results.length === 0) {
-                    resultsList.innerHTML = `<div class="result-snippet">No matching search results found.</div>`;
+                    listEl.innerHTML = `<div class="result-snippet">No pages matched your search query in the local index. Switch to the <b>Spider Tab</b> to crawl websites!</div>`;
                     return;
                 }
 
-                // Render Search Results
-                data.results.forEach(res => {
-                    const item = document.createElement('div');
-                    item.className = 'result-item';
-                    item.innerHTML = `
+                data.results.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.innerHTML = `
                         <div class="result-meta">
-                            ${res.favicon ? `<img class="result-favicon" src="${res.favicon}" onerror="this.style.display='none'">` : ''}
-                            <span class="result-domain">${res.domain || res.url}</span>
+                            ${item.favicon ? `<img class="result-favicon" src="${item.favicon}" onerror="this.style.display='none'">` : ''}
+                            <span class="result-domain">${item.domain}</span>
                         </div>
-                        <a class="result-title" href="${res.url}" target="_blank" rel="noopener">${res.title}</a>
-                        <div class="result-snippet">${res.snippet}</div>
+                        <a class="result-title" href="${item.url}" target="_blank" rel="noopener">${item.title}</a>
+                        <div class="result-snippet">${item.snippet}</div>
                     `;
-                    resultsList.appendChild(item);
+                    listEl.appendChild(div);
                 });
-
-                // Render Pagination
-                for (let p = 1; p <= 5; p++) {
-                    const btn = document.createElement('button');
-                    btn.className = `page-btn ${p === page ? 'active' : ''}`;
-                    btn.textContent = p;
-                    btn.onclick = () => triggerSearch(tabId, p, true);
-                    paginationEl.appendChild(btn);
-                }
-
             } catch (err) {
-                resultsStats.textContent = 'Error connecting to search network.';
+                statsEl.textContent = 'Search failed.';
             }
         }
 
-        function navigateHistory(direction) {
-            const tab = tabs.find(t => t.id === activeTabId);
-            if (!tab) return;
+        // Spider & Admin Functionality
+        async function startCrawl() {
+            const seedUrl = document.getElementById('seedUrl').value.trim();
+            if (!seedUrl) return alert('Please enter a valid HTTP/HTTPS URL');
 
-            const newIndex = tab.historyIndex + direction;
-            if (newIndex >= 0 && newIndex < tab.history.length) {
-                tab.historyIndex = newIndex;
-                const targetUrl = tab.history[newIndex];
-
-                if (targetUrl === 'snub://home') {
-                    document.getElementById(`dashboard-${tab.id}`).style.display = 'flex';
-                    document.getElementById(`results-container-${tab.id}`).style.display = 'none';
-                    tab.url = 'snub://home';
-                    tab.title = 'New Tab';
-                    document.getElementById(`tab-title-${tab.id}`).textContent = 'New Tab';
-                    urlInput.value = tab.url;
-                } else {
-                    const match = targetUrl.match(/q=([^&]+)/);
-                    if (match) {
-                        const query = decodeURIComponent(match[1]);
-                        document.getElementById(`results-search-input-${tab.id}`).value = query;
-                        triggerSearch(tab.id, 1, true);
-                    }
-                }
+            try {
+                await fetch('/api/crawl/seed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: seedUrl, maxPages: 20 })
+                });
+                alert('Crawler dispatched! Watch output terminal.');
+            } catch (e) {
+                alert('Failed to dispatch crawler');
             }
         }
 
-        function reloadTab() {
-            if (activeTabId) {
-                const tab = tabs.find(t => t.id === activeTabId);
-                if (tab && tab.query) {
-                    triggerSearch(activeTabId, tab.currentPage, true);
-                }
-            }
+        async function updateCrawlStatus() {
+            try {
+                const res = await fetch('/api/crawl/status');
+                const data = await res.json();
+
+                document.getElementById('statIndexed').textContent = data.indexCount;
+                document.getElementById('statQueue').textContent = data.queueCount;
+
+                const terminal = document.getElementById('logTerminal');
+                terminal.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+                terminal.scrollTop = terminal.scrollHeight;
+            } catch (e) {}
         }
 
-        document.getElementById('newTabBtn').addEventListener('click', () => createTab());
-
-        createTab();
+        setInterval(updateCrawlStatus, 2000);
+        updateCrawlStatus();
     </script>
 </body>
 </html>
